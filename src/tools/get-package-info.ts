@@ -32,6 +32,28 @@ export async function getPackageInfo(params: GetPackageInfoParams): Promise<Pack
   }
 
   try {
+    // First, check if package exists
+    logger.debug(`Checking package existence: ${groupId}:${artifactId}`);
+    const packageExists = await mavenCentralApi.packageExists(groupId, artifactId);
+    
+    if (!packageExists) {
+      logger.warn(`Package not found: ${groupId}:${artifactId}`);
+      
+      // Return response with exists: false
+      const result: PackageInfoResponse = {
+        package_name: `${groupId}:${artifactId}`,
+        latest_version: 'unknown',
+        description: 'Package not found',
+        organization: 'Unknown',
+        license: 'Unknown',
+        keywords: [],
+        download_stats: { last_day: 0, last_week: 0, last_month: 0 },
+        exists: false,
+      };
+      
+      return result;
+    }
+    
     // Get latest version
     const latestVersion = await mavenCentralApi.getLatestVersion(groupId, artifactId);
     
@@ -82,6 +104,7 @@ export async function getPackageInfo(params: GetPackageInfoParams): Promise<Pack
       test_dependencies: testDependencies,
       download_stats: downloadStats,
       repository,
+      exists: true,
     };
 
     // Cache the result

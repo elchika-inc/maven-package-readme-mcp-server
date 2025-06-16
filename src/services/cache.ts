@@ -136,6 +136,10 @@ export class CacheService {
   static generatePomKey(groupId: string, artifactId: string, version: string): string {
     return `pom:${groupId}:${artifactId}:${version}`;
   }
+
+  static generatePackageExistsKey(groupId: string, artifactId: string): string {
+    return `pkg_exists:${groupId}:${artifactId}`;
+  }
 }
 
 // Global cache instance

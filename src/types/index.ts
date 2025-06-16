@@ -91,6 +91,7 @@ export interface PackageReadmeResponse {
   installation: InstallationInfo;
   basic_info: PackageBasicInfo;
   repository?: RepositoryInfo | undefined;
+  exists: boolean; // Whether the package exists
 }
 
 export interface PackageInfoResponse {
@@ -104,6 +105,7 @@ export interface PackageInfoResponse {
   test_dependencies?: Record<string, string> | undefined;
   download_stats: DownloadStats;
   repository?: RepositoryInfo | undefined;
+  exists: boolean; // Whether the package exists
 }
 
 export interface SearchPackagesResponse {

@@ -232,6 +232,29 @@ export class MavenCentralApi {
   }
 
   /**
+   * Check if a package exists in Maven Central
+   */
+  async packageExists(groupId: string, artifactId: string): Promise<boolean> {
+    const cacheKey = CacheService.generatePackageExistsKey(groupId, artifactId);
+    const cached = cache.get<boolean>(cacheKey);
+    if (cached !== null && cached !== undefined) {
+      return cached;
+    }
+
+    const searchQuery = `g:"${groupId}" AND a:"${artifactId}"`;
+    
+    return ErrorHandler.withRetry(async () => {
+      const searchResult = await this.searchPackages(searchQuery, 1);
+      const exists = searchResult.response.numFound > 0;
+      
+      cache.set(cacheKey, exists, 1800000); // 30 minutes cache
+      logger.debug('Package existence check', { groupId, artifactId, exists });
+      
+      return exists;
+    }, 3, 1000, 'Package existence check');
+  }
+
+  /**
    * Check if a specific version exists
    */
   async versionExists(groupId: string, artifactId: string, version: string): Promise<boolean> {

@@ -31,6 +31,37 @@ export async function getPackageReadme(params: GetPackageReadmeParams): Promise<
   }
 
   try {
+    // First, check if package exists
+    logger.debug(`Checking package existence: ${groupId}:${artifactId}`);
+    const packageExists = await mavenCentralApi.packageExists(groupId, artifactId);
+    
+    if (!packageExists) {
+      logger.warn(`Package not found: ${groupId}:${artifactId}`);
+      
+      // Return response with exists: false
+      const result: PackageReadmeResponse = {
+        package_name: `${groupId}:${artifactId}`,
+        version: version,
+        description: 'Package not found',
+        readme_content: '',
+        usage_examples: [],
+        installation: buildInstallationInfo(groupId, artifactId, version),
+        basic_info: {
+          groupId,
+          artifactId,
+          version,
+          description: 'Package not found',
+          license: 'Unknown',
+          keywords: [],
+        },
+        exists: false,
+      };
+      
+      return result;
+    }
+    
+    logger.debug(`Package found: ${groupId}:${artifactId}`);
+
     // Resolve version
     const resolvedVersion = await VersionResolver.resolveVersion(groupId, artifactId, version);
     
@@ -62,6 +93,7 @@ export async function getPackageReadme(params: GetPackageReadmeParams): Promise<
       installation,
       basic_info: basicInfo,
       repository,
+      exists: true,
     };
 
     // Cache the result
