@@ -1,5 +1,11 @@
 # Maven Package README MCP Server
 
+[![npm version](https://img.shields.io/npm/v/maven-package-readme-mcp-server)](https://www.npmjs.com/package/maven-package-readme-mcp-server)
+[![npm downloads](https://img.shields.io/npm/dm/maven-package-readme-mcp-server)](https://www.npmjs.com/package/maven-package-readme-mcp-server)
+[![GitHub stars](https://img.shields.io/github/stars/naoto24kawa/maven-package-readme-mcp-server)](https://github.com/naoto24kawa/maven-package-readme-mcp-server)
+[![GitHub issues](https://img.shields.io/github/issues/naoto24kawa/maven-package-readme-mcp-server)](https://github.com/naoto24kawa/maven-package-readme-mcp-server/issues)
+[![license](https://img.shields.io/npm/l/maven-package-readme-mcp-server)](https://github.com/naoto24kawa/maven-package-readme-mcp-server/blob/main/LICENSE)
+
 An MCP (Model Context Protocol) server that provides tools for fetching Maven package information, README content, and usage examples from Maven Central and GitHub repositories.
 
 ## Features
@@ -54,8 +60,13 @@ Get package README and usage examples from Maven Central.
 
 **Parameters:**
 - `package_name` (string, required): Maven package in `groupId:artifactId` format
-- `version` (string, optional): Package version (default: "latest")
+- `version` (string, optional): Package version or version range (default: "latest")
 - `include_examples` (boolean, optional): Include usage examples (default: true)
+
+**Version Format:**
+- Specific version: `"6.0.0"`
+- Latest version: `"latest"` (default)
+- Version ranges: `"[1.0,2.0)"` (Maven version range syntax)
 
 **Example:**
 ```json
@@ -218,10 +229,6 @@ Examples:
 Environment variables:
 
 - `GITHUB_TOKEN`: GitHub personal access token for enhanced API limits (optional)
-- `CACHE_TTL`: Cache time-to-live in milliseconds (default: 3600000 = 1 hour)
-- `CACHE_MAX_SIZE`: Maximum cache entries (default: 100)
-- `LOG_LEVEL`: Logging level (debug, info, warn, error)
-- `NODE_ENV`: Environment (development, production)
 
 ## Development
 
@@ -240,14 +247,8 @@ npm run build
 # Run built version
 npm start
 
-# Run tests
-npm test
-
 # Lint code
 npm run lint
-
-# Type checking
-npm run typecheck
 ```
 
 ### Project Structure
@@ -300,10 +301,9 @@ All errors are properly typed and include context information.
 
 ## Caching Strategy
 
-- **Memory-based LRU cache** with configurable TTL and size limits
+- **Memory-based cache** for API responses
 - **Cache keys** based on package coordinates and operation type
 - **Automatic cleanup** of expired entries
-- **Cache warming** for frequently accessed packages
 
 ## Contributing
 
