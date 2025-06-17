@@ -50,7 +50,7 @@ export async function searchPackages(params: SearchPackagesParams): Promise<Sear
       return {
         groupId: doc.g,
         artifactId: doc.a,
-        version: doc.v,
+        version: doc.v || doc.latestVersion || 'unknown',
         description: extractDescription(doc),
         keywords: doc.tags || [],
         organization: extractOrganization(doc.g),

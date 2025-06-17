@@ -11,7 +11,6 @@ import { logger } from '../utils/logger.js';
 import { mavenCentralApi } from '../services/maven-central-api.js';
 import { githubApi, GitHubApi } from '../services/github-api.js';
 import { ReadmeParser } from '../services/readme-parser.js';
-import { VersionResolver } from '../services/version-resolver.js';
 import { cache, CacheService } from '../services/cache.js';
 
 export async function getPackageReadme(params: GetPackageReadmeParams): Promise<PackageReadmeResponse> {
@@ -31,14 +30,34 @@ export async function getPackageReadme(params: GetPackageReadmeParams): Promise<
   }
 
   try {
-    // First, check if package exists
-    logger.debug(`Checking package existence: ${groupId}:${artifactId}`);
-    const packageExists = await mavenCentralApi.packageExists(groupId, artifactId);
+    // Get package info from Maven Central directly
+    let packageInfo;
     
-    if (!packageExists) {
-      logger.warn(`Package not found: ${groupId}:${artifactId}`);
+    try {
+      logger.debug(`Getting package info for: ${groupId}:${artifactId}@${version}`);
+      // Check if package exists first
+      const packageExists = await mavenCentralApi.packageExists(groupId, artifactId);
+      if (!packageExists) {
+        throw new Error(`Package not found: ${groupId}:${artifactId}`);
+      }
       
-      // Return response with exists: false
+      // Get POM XML to extract package information
+      const actualVersion = version === 'latest' 
+        ? await mavenCentralApi.getLatestVersion(groupId, artifactId)
+        : version;
+      const pomXml = await mavenCentralApi.getPomXml(groupId, artifactId, actualVersion);
+      
+      // Create a mock package info object
+      packageInfo = {
+        groupId,
+        artifactId,
+        version: actualVersion,
+        pomXml
+      };
+    } catch (error) {
+      // If package not found, return a response indicating non-existence
+      logger.debug(`Package not found: ${groupId}:${artifactId}`);
+      
       const result: PackageReadmeResponse = {
         package_name: `${groupId}:${artifactId}`,
         version: version,
@@ -60,10 +79,12 @@ export async function getPackageReadme(params: GetPackageReadmeParams): Promise<
       return result;
     }
     
+    logger.debug(`Package info retrieved for: ${groupId}:${artifactId}@${packageInfo.version}`);
+    
     logger.debug(`Package found: ${groupId}:${artifactId}`);
 
-    // Resolve version
-    const resolvedVersion = await VersionResolver.resolveVersion(groupId, artifactId, version);
+    // Use the version already resolved above
+    const resolvedVersion = packageInfo.version;
     
     // Get POM XML to extract basic info
     const pomXml = await mavenCentralApi.getPomXml(groupId, artifactId, resolvedVersion);

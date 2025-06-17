@@ -139,12 +139,15 @@ export interface MavenSearchDoc {
   id: string;
   g: string; // groupId
   a: string; // artifactId
-  v: string; // version
+  v?: string; // version (for specific version searches)
+  latestVersion?: string; // latest version (for groupId:artifactId searches)
   p: string; // packaging
   timestamp: number;
   tags?: string[];
   ec?: string[]; // extension classifiers
   text?: string[];
+  versionCount?: number;
+  repositoryId?: string;
 }
 
 export interface MavenMetadata {

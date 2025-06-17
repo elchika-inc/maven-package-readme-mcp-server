@@ -117,7 +117,6 @@ export class MavenCentralApi {
 
     // Try to get versions from search API first
     const searchQuery = `g:"${groupId}" AND a:"${artifactId}"`;
-    
     return ErrorHandler.withRetry(async () => {
       const searchResult = await this.searchPackages(searchQuery, 100); // Get more results for versions
       
@@ -125,8 +124,10 @@ export class MavenCentralApi {
         throw new PackageNotFoundError(`${groupId}:${artifactId}`);
       }
 
+      
       const versions = searchResult.response.docs
-        .map(doc => doc.v)
+        .map(doc => doc.v || doc.latestVersion) // Try both v and latestVersion fields
+        .filter((version): version is string => Boolean(version && typeof version === 'string')) // Remove undefined/null versions
         .filter((version, index, array) => array.indexOf(version) === index) // Remove duplicates
         .sort((a, b) => this.compareVersions(b, a)); // Sort descending (newest first)
 

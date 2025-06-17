@@ -21,8 +21,8 @@ import {
 } from './types/index.js';
 
 const TOOL_DEFINITIONS = {
-  get_package_readme: {
-    name: 'get_package_readme',
+  get_readme_from_maven: {
+    name: 'get_readme_from_maven',
     description: 'Get package README and usage examples from Maven Central',
     inputSchema: {
       type: 'object',
@@ -45,8 +45,8 @@ const TOOL_DEFINITIONS = {
       required: ['package_name'],
     }
   },
-  get_package_info: {
-    name: 'get_package_info',
+  get_package_info_from_maven: {
+    name: 'get_package_info_from_maven',
     description: 'Get package basic information and dependencies from Maven Central',
     inputSchema: {
       type: 'object',
@@ -69,8 +69,8 @@ const TOOL_DEFINITIONS = {
       required: ['package_name'],
     }
   },
-  search_packages: {
-    name: 'search_packages',
+  search_packages_from_maven: {
+    name: 'search_packages_from_maven',
     description: 'Search for packages in Maven Central',
     inputSchema: {
       type: 'object',
@@ -158,13 +158,13 @@ export class MavenPackageReadmeMcpServer {
         }
 
         switch (name) {
-          case 'get_package_readme':
+          case 'get_readme_from_maven':
             return await this.handleGetPackageReadme(this.validateGetPackageReadmeParams(args));
           
-          case 'get_package_info':
+          case 'get_package_info_from_maven':
             return await this.handleGetPackageInfo(this.validateGetPackageInfoParams(args));
           
-          case 'search_packages':
+          case 'search_packages_from_maven':
             return await this.handleSearchPackages(this.validateSearchPackagesParams(args));
           
           default:
