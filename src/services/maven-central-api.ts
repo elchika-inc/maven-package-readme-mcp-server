@@ -14,6 +14,13 @@ export class MavenCentralApi {
   private static readonly SEARCH_BASE_URL = 'https://search.maven.org/solrsearch/select';
   private static readonly REPO_BASE_URL = 'https://repo1.maven.org/maven2';
   private static readonly REQUEST_TIMEOUT = 30000; // 30 seconds
+  private static readonly DEFAULT_SEARCH_ROWS = 20;
+  private static readonly MAX_VERSION_ROWS = 100;
+  private static readonly RETRY_COUNT = 3;
+  private static readonly RETRY_BASE_DELAY = 1000;
+  private static readonly CACHE_TTL_SEARCH = 300000; // 5 minutes
+  private static readonly CACHE_TTL_VERSIONS = 1800000; // 30 minutes
+  private static readonly CACHE_TTL_POM = 3600000; // 1 hour
 
   private async fetchWithTimeout(url: string, options?: RequestInit): Promise<Response> {
     const controller = new AbortController();
@@ -60,7 +67,7 @@ export class MavenCentralApi {
    */
   async searchPackages(
     query: string,
-    rows: number = 20,
+    rows: number = MavenCentralApi.DEFAULT_SEARCH_ROWS,
     start: number = 0
   ): Promise<MavenSearchResponse> {
     const cacheKey = CacheService.generateSearchKey(query, rows);
@@ -81,7 +88,7 @@ export class MavenCentralApi {
       const response = await this.fetchWithTimeout(url.toString());
       const data = await response.json() as MavenSearchResponse;
       
-      cache.set(cacheKey, data, 300000); // 5 minutes cache for search results
+      cache.set(cacheKey, data, MavenCentralApi.CACHE_TTL_SEARCH);
       logger.info('Maven Central search completed', { 
         query, 
         found: data.response.numFound,
@@ -89,7 +96,7 @@ export class MavenCentralApi {
       });
       
       return data;
-    }, 3, 1000, 'Maven Central search');
+    }, MavenCentralApi.RETRY_COUNT, MavenCentralApi.RETRY_BASE_DELAY, 'Maven Central search');
   }
 
   /**
@@ -118,7 +125,7 @@ export class MavenCentralApi {
     // Try to get versions from search API first
     const searchQuery = `g:"${groupId}" AND a:"${artifactId}"`;
     return ErrorHandler.withRetry(async () => {
-      const searchResult = await this.searchPackages(searchQuery, 100); // Get more results for versions
+      const searchResult = await this.searchPackages(searchQuery, MavenCentralApi.MAX_VERSION_ROWS);
       
       if (searchResult.response.numFound === 0) {
         throw new PackageNotFoundError(`${groupId}:${artifactId}`);
@@ -131,11 +138,11 @@ export class MavenCentralApi {
         .filter((version, index, array) => array.indexOf(version) === index) // Remove duplicates
         .sort((a, b) => this.compareVersions(b, a)); // Sort descending (newest first)
 
-      cache.set(cacheKey, versions, 1800000); // 30 minutes cache
+      cache.set(cacheKey, versions, MavenCentralApi.CACHE_TTL_VERSIONS);
       logger.debug('Retrieved versions', { groupId, artifactId, count: versions.length });
       
       return versions;
-    }, 3, 1000, 'Maven versions fetch');
+    }, MavenCentralApi.RETRY_COUNT, MavenCentralApi.RETRY_BASE_DELAY, 'Maven versions fetch');
   }
 
   // getLatestVersion method already defined above
@@ -160,7 +167,7 @@ export class MavenCentralApi {
         const response = await this.fetchWithTimeout(pomUrl);
         const pomContent = await response.text();
         
-        cache.set(cacheKey, pomContent, 3600000); // 1 hour cache for POM files
+        cache.set(cacheKey, pomContent, MavenCentralApi.CACHE_TTL_POM);
         logger.debug('POM XML retrieved', { groupId, artifactId, version, size: pomContent.length });
         
         return pomContent;
@@ -170,7 +177,7 @@ export class MavenCentralApi {
         }
         throw error;
       }
-    }, 3, 1000, 'POM XML fetch');
+    }, MavenCentralApi.RETRY_COUNT, MavenCentralApi.RETRY_BASE_DELAY, 'POM XML fetch');
   }
 
   /**
@@ -248,11 +255,11 @@ export class MavenCentralApi {
       const searchResult = await this.searchPackages(searchQuery, 1);
       const exists = searchResult.response.numFound > 0;
       
-      cache.set(cacheKey, exists, 1800000); // 30 minutes cache
+      cache.set(cacheKey, exists, MavenCentralApi.CACHE_TTL_VERSIONS);
       logger.debug('Package existence check', { groupId, artifactId, exists });
       
       return exists;
-    }, 3, 1000, 'Package existence check');
+    }, MavenCentralApi.RETRY_COUNT, MavenCentralApi.RETRY_BASE_DELAY, 'Package existence check');
   }
 
   /**

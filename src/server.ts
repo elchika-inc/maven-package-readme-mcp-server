@@ -1,15 +1,6 @@
-import { Server } from '@modelcontextprotocol/sdk/server/index.js';
+import { BasePackageServer, ToolDefinition } from '@elchika-inc/package-readme-shared';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import {
-  CallToolRequestSchema,
-  ErrorCode,
-  ListPromptsRequestSchema,
-  ListResourcesRequestSchema,
-  ListToolsRequestSchema,
-  McpError,
-} from '@modelcontextprotocol/sdk/types.js';
-
-import { logger } from './utils/logger.js';
+import { McpError, ErrorCode } from '@modelcontextprotocol/sdk/types.js';
 import { getPackageReadme } from './tools/get-package-readme.js';
 import { getPackageInfo } from './tools/get-package-info.js';
 import { searchPackages } from './tools/search-packages.js';
@@ -19,8 +10,9 @@ import {
   SearchPackagesParams,
   PackageReadmeMcpError,
 } from './types/index.js';
+import { logger } from './utils/logger.js';
 
-const TOOL_DEFINITIONS = {
+const TOOL_DEFINITIONS: Record<string, ToolDefinition> = {
   get_readme_from_maven: {
     name: 'get_readme_from_maven',
     description: 'Get package README and usage examples from Maven Central',
@@ -104,96 +96,38 @@ const TOOL_DEFINITIONS = {
   },
 } as const;
 
-export class MavenPackageReadmeMcpServer {
-  private server: Server;
-
+export class MavenPackageReadmeMcpServer extends BasePackageServer {
   constructor() {
-    this.server = new Server(
-      {
-        name: 'maven-package-readme-mcp',
-        version: '1.0.0',
-      },
-      {
-        capabilities: {
-          tools: {},
-          prompts: {},
-          resources: {}
-        }
-      }
-    );
-
-    this.setupHandlers();
+    super({
+      name: 'maven-package-readme-mcp',
+      version: '1.0.0',
+    });
   }
 
-  private setupHandlers(): void {
-    // List available tools
-    (this.server as any).setRequestHandler(ListToolsRequestSchema, async () => {
-      return {
-        tools: Object.values(TOOL_DEFINITIONS),
+  protected getToolDefinitions(): Record<string, ToolDefinition> {
+    return TOOL_DEFINITIONS;
+  }
+
+  protected async handleToolCall(name: string, args: unknown): Promise<unknown> {
+    try {
+      switch (name) {
+        case 'get_readme_from_maven':
+          return await getPackageReadme(this.validateGetPackageReadmeParams(args));
+        
+        case 'get_package_info_from_maven':
+          return await getPackageInfo(this.validateGetPackageInfoParams(args));
+        
+        case 'search_packages_from_maven':
+          return await searchPackages(this.validateSearchPackagesParams(args));
+        
+        default:
+          throw new Error(`Unknown tool: ${name}`);
       }
-    });
-
-    // Handle prompts list
-    (this.server as any).setRequestHandler(ListPromptsRequestSchema, async () => {
-      return { prompts: [] };
-    });
-
-    // Handle resources list
-    (this.server as any).setRequestHandler(ListResourcesRequestSchema, async () => {
-      return { resources: [] };
-    });
-
-    // Handle tool calls
-    (this.server as any).setRequestHandler(CallToolRequestSchema, async (request: any, _extra: any) => {
-      const { name, arguments: args } = request.params;
-      
-
-      try {
-        // Validate that args is an object
-        if (!args || typeof args !== 'object') {
-          throw new McpError(
-            ErrorCode.InvalidParams,
-            'Tool arguments must be an object'
-          );
-        }
-
-        switch (name) {
-          case 'get_readme_from_maven':
-            return await this.handleGetPackageReadme(this.validateGetPackageReadmeParams(args));
-          
-          case 'get_package_info_from_maven':
-            return await this.handleGetPackageInfo(this.validateGetPackageInfoParams(args));
-          
-          case 'search_packages_from_maven':
-            return await this.handleSearchPackages(this.validateSearchPackagesParams(args));
-          
-          default:
-            throw new McpError(
-              ErrorCode.MethodNotFound,
-              `Unknown tool: ${name}`
-            );
-        }
-      } catch (error) {
-        logger.error(`Tool execution failed: ${name}`, { error, args });
-        
-        if (error instanceof PackageReadmeMcpError) {
-          throw new McpError(
-            this.mapErrorCode(error.code),
-            error.message,
-            error.details
-          );
-        }
-        
-        if (error instanceof McpError) {
-          throw error;
-        }
-        
-        throw new McpError(
-          ErrorCode.InternalError,
-          `Internal error: ${error instanceof Error ? error.message : String(error)}`
-        );
-      }
-    });
+    } catch (error) {
+      // Log error for debugging but let the base class handle MCP error formatting
+      console.error(`Tool execution failed: ${name}`, error);
+      throw error;
+    }
   }
 
   private validateGetPackageReadmeParams(args: unknown): GetPackageReadmeParams {
@@ -244,17 +178,6 @@ export class MavenPackageReadmeMcpServer {
     return result;
   }
 
-  private async handleGetPackageReadme(params: GetPackageReadmeParams) {
-    const result = await getPackageReadme(params);
-    return {
-      content: [
-        {
-          type: 'text',
-          text: JSON.stringify(result, null, 2)
-        }
-      ]
-    };
-  }
 
   private validateGetPackageInfoParams(args: unknown): GetPackageInfoParams {
     if (!args || typeof args !== 'object') {
@@ -304,17 +227,6 @@ export class MavenPackageReadmeMcpServer {
     return result;
   }
 
-  private async handleGetPackageInfo(params: GetPackageInfoParams) {
-    const result = await getPackageInfo(params);
-    return {
-      content: [
-        {
-          type: 'text',
-          text: JSON.stringify(result, null, 2)
-        }
-      ]
-    };
-  }
 
   private validateSearchPackagesParams(args: unknown): SearchPackagesParams {
     if (!args || typeof args !== 'object') {
@@ -381,17 +293,6 @@ export class MavenPackageReadmeMcpServer {
     return result;
   }
 
-  private async handleSearchPackages(params: SearchPackagesParams) {
-    const result = await searchPackages(params);
-    return {
-      content: [
-        {
-          type: 'text',
-          text: JSON.stringify(result, null, 2)
-        }
-      ]
-    };
-  }
 
   private mapErrorCode(code: string): ErrorCode {
     switch (code) {

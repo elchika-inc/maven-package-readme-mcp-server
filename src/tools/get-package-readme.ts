@@ -6,6 +6,8 @@ import {
   RepositoryInfo,
   // PackageNotFoundError, // Currently unused
 } from '../types/index.js';
+
+const CACHE_TTL_README = 1800000; // 30 minutes
 import { Validators } from '../utils/validators.js';
 import { logger } from '../utils/logger.js';
 import { mavenCentralApi } from '../services/maven-central-api.js';
@@ -118,7 +120,7 @@ export async function getPackageReadme(params: GetPackageReadmeParams): Promise<
     };
 
     // Cache the result
-    cache.set(cacheKey, result, 1800000); // 30 minutes cache
+    cache.set(cacheKey, result, CACHE_TTL_README);
     
     logger.info('Package README retrieved successfully', { 
       groupId, 
