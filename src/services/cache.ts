@@ -124,7 +124,7 @@ export class CacheService {
       popularity?.toString() ?? 'any'
     ].join(':');
     
-    // Create a simple hash of the search parameters
+    // Create a hash of the search parameters for cache key
     const hash = Buffer.from(params, 'utf8').toString('base64').replace(/[^a-zA-Z0-9]/g, '').substring(0, 16);
     return `search:${hash}`;
   }

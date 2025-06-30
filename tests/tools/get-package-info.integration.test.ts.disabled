@@ -1,0 +1,195 @@
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { getPackageInfo } from '../../src/tools/get-package-info.js';
+import { mavenCentralApi } from '../../src/services/maven-central-api.js';
+
+// Mock the services
+vi.mock('../../src/services/maven-central-api.js', () => ({
+  mavenCentralApi: {
+    packageExists: vi.fn(),
+    searchPackages: vi.fn(),
+    getVersions: vi.fn(),
+    getPomXml: vi.fn(),
+    parsePomXml: vi.fn(),
+  }
+}));
+
+describe('getPackageInfo integration', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('should get package info successfully', async () => {
+    const mockSearchResponse = {
+      response: {
+        numFound: 1,
+        docs: [
+          {
+            id: 'org.springframework:spring-core',
+            g: 'org.springframework',
+            a: 'spring-core',
+            latestVersion: '6.0.0',
+            repositoryId: 'central',
+            p: 'jar',
+            timestamp: 1234567890000,
+            versionCount: 150
+          }
+        ]
+      }
+    };
+
+    const mockVersions = ['6.0.0', '5.3.21', '5.3.20'];
+    
+    const mockPomContent = `
+<project>
+  <groupId>org.springframework</groupId>
+  <artifactId>spring-core</artifactId>
+  <version>6.0.0</version>
+  <name>Spring Core</name>
+  <description>Spring Framework Core</description>
+  <url>https://spring.io/projects/spring-framework</url>
+  <licenses>
+    <license>
+      <name>Apache License, Version 2.0</name>
+      <url>https://www.apache.org/licenses/LICENSE-2.0</url>
+    </license>
+  </licenses>
+  <dependencies>
+    <dependency>
+      <groupId>org.springframework</groupId>
+      <artifactId>spring-jcl</artifactId>
+      <version>6.0.0</version>
+    </dependency>
+  </dependencies>
+</project>
+    `;
+
+    // Mock Maven Central API calls
+    vi.mocked(mavenCentralApi.packageExists).mockResolvedValue(true);
+    vi.mocked(mavenCentralApi.searchPackages).mockResolvedValue(mockSearchResponse);
+    vi.mocked(mavenCentralApi.getVersions).mockResolvedValue(mockVersions);
+    vi.mocked(mavenCentralApi.getPomXml).mockResolvedValue(mockPomContent);
+    vi.mocked(mavenCentralApi.parsePomXml).mockReturnValue({
+      project: {
+        groupId: 'org.springframework',
+        artifactId: 'spring-core',
+        version: '6.0.0',
+        name: 'Spring Core',
+        description: 'Spring Framework Core',
+        url: 'https://spring.io/projects/spring-framework'
+      }
+    });
+
+    const result = await getPackageInfo({
+      package_name: 'org.springframework:spring-core',
+      include_dependencies: true
+    });
+
+    expect(result).toEqual({
+      package_name: 'org.springframework:spring-core',
+      name: 'Spring Core',
+      description: 'Spring Framework Core',
+      latest_version: '6.0.0',
+      versions: mockVersions,
+      homepage: 'https://spring.io/projects/spring-framework',
+      repository: expect.objectContaining({
+        type: 'maven',
+        url: expect.stringContaining('maven.org')
+      }),
+      dependencies: expect.arrayContaining([
+        expect.objectContaining({
+          group_id: 'org.springframework',
+          artifact_id: 'spring-jcl',
+          version: '6.0.0'
+        })
+      ]),
+      stats: expect.objectContaining({
+        version_count: 150
+      })
+    });
+
+    expect(mavenCentralApi.packageExists).toHaveBeenCalledWith('org.springframework', 'spring-core');
+    expect(mavenCentralApi.searchPackages).toHaveBeenCalled();
+    expect(mavenCentralApi.getVersions).toHaveBeenCalledWith('org.springframework', 'spring-core');
+  });
+
+  it('should handle package not found', async () => {
+    vi.mocked(mavenCentralApi.packageExists).mockResolvedValue(false);
+
+    await expect(getPackageInfo({
+      package_name: 'nonexistent:package'
+    })).rejects.toThrow('Package not found');
+
+    expect(mavenCentralApi.packageExists).toHaveBeenCalledWith('nonexistent', 'package');
+  });
+
+  it('should not include dependencies when include_dependencies is false', async () => {
+    const mockSearchResponse = {
+      response: {
+        numFound: 1,
+        docs: [
+          {
+            id: 'test:test',
+            g: 'test',
+            a: 'test',
+            latestVersion: '1.0.0'
+          }
+        ]
+      }
+    };
+
+    const mockPomContent = '<project><groupId>test</groupId><artifactId>test</artifactId></project>';
+
+    vi.mocked(mavenCentralApi.packageExists).mockResolvedValue(true);
+    vi.mocked(mavenCentralApi.searchPackages).mockResolvedValue(mockSearchResponse);
+    vi.mocked(mavenCentralApi.getVersions).mockResolvedValue(['1.0.0']);
+    vi.mocked(mavenCentralApi.getPomXml).mockResolvedValue(mockPomContent);
+    vi.mocked(mavenCentralApi.parsePomXml).mockReturnValue({
+      project: { groupId: 'test', artifactId: 'test' }
+    });
+
+    const result = await getPackageInfo({
+      package_name: 'test:test',
+      include_dependencies: false
+    });
+
+    expect(result.dependencies).toBeUndefined();
+    expect(mavenCentralApi.getPomXml).not.toHaveBeenCalled();
+  });
+
+  it('should handle search result without complete info', async () => {
+    const mockSearchResponse = {
+      response: {
+        numFound: 1,
+        docs: [
+          {
+            id: 'test:test',
+            g: 'test',
+            a: 'test'
+            // Missing latestVersion, versionCount, etc.
+          }
+        ]
+      }
+    };
+
+    vi.mocked(mavenCentralApi.packageExists).mockResolvedValue(true);
+    vi.mocked(mavenCentralApi.searchPackages).mockResolvedValue(mockSearchResponse);
+    vi.mocked(mavenCentralApi.getVersions).mockResolvedValue(['1.0.0']);
+
+    const result = await getPackageInfo({
+      package_name: 'test:test'
+    });
+
+    expect(result.latest_version).toBe('1.0.0'); // From versions array
+    expect(result.stats.version_count).toBeUndefined();
+  });
+
+  it('should validate package name format', async () => {
+    await expect(getPackageInfo({
+      package_name: 'invalid-package-name'
+    })).rejects.toThrow();
+  });
+});

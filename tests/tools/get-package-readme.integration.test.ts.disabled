@@ -1,0 +1,232 @@
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { getPackageReadme } from '../../src/tools/get-package-readme.js';
+import { mavenCentralApi } from '../../src/services/maven-central-api.js';
+import { githubApi } from '../../src/services/github-api.js';
+import { PackageNotFoundError } from '../../src/types/index.js';
+
+// Mock the services
+vi.mock('../../src/services/maven-central-api.js', () => ({
+  mavenCentralApi: {
+    packageExists: vi.fn(),
+    getLatestVersion: vi.fn(),
+    getPomXml: vi.fn(),
+    parsePomXml: vi.fn(),
+  }
+}));
+
+vi.mock('../../src/services/github-api.js', () => ({
+  githubApi: {
+    getReadmeFromRepository: vi.fn(),
+  }
+}));
+
+describe('getPackageReadme integration', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('should get package README successfully', async () => {
+    const mockPomContent = `
+<project>
+  <groupId>org.springframework</groupId>
+  <artifactId>spring-core</artifactId>
+  <version>6.0.0</version>
+  <name>Spring Core</name>
+  <description>Spring Framework Core</description>
+  <url>https://spring.io/projects/spring-framework</url>
+  <scm>
+    <url>https://github.com/spring-projects/spring-framework</url>
+  </scm>
+</project>
+    `;
+
+    const mockReadmeContent = `
+# Spring Framework
+
+The Spring Framework is a powerful, lightweight framework for building Java applications.
+
+## Usage
+
+\`\`\`java
+@Configuration
+@EnableAutoConfiguration
+@ComponentScan
+public class Application {
+    public static void main(String[] args) {
+        SpringApplication.run(Application.class, args);
+    }
+}
+\`\`\`
+
+\`\`\`xml
+<dependency>
+    <groupId>org.springframework</groupId>
+    <artifactId>spring-core</artifactId>
+    <version>6.0.0</version>
+</dependency>
+\`\`\`
+    `;
+
+    // Mock Maven Central API calls
+    vi.mocked(mavenCentralApi.packageExists).mockResolvedValue(true);
+    vi.mocked(mavenCentralApi.getLatestVersion).mockResolvedValue('6.0.0');
+    vi.mocked(mavenCentralApi.getPomXml).mockResolvedValue(mockPomContent);
+    vi.mocked(mavenCentralApi.parsePomXml).mockReturnValue({
+      project: {
+        groupId: 'org.springframework',
+        artifactId: 'spring-core',
+        version: '6.0.0',
+        name: 'Spring Core',
+        description: 'Spring Framework Core',
+        url: 'https://spring.io/projects/spring-framework'
+      }
+    });
+
+    // Mock GitHub API call
+    vi.mocked(githubApi.getReadmeFromRepository).mockResolvedValue({
+      content: mockReadmeContent,
+      source: 'https://github.com/spring-projects/spring-framework'
+    });
+
+    const result = await getPackageReadme({
+      package_name: 'org.springframework:spring-core',
+      version: 'latest',
+      include_examples: true
+    });
+
+    expect(result).toEqual({
+      package_name: 'org.springframework:spring-core',
+      version: '6.0.0',
+      readme_content: mockReadmeContent,
+      installation: {
+        maven: expect.objectContaining({
+          dependency_xml: expect.stringContaining('<groupId>org.springframework</groupId>')
+        }),
+        gradle: expect.objectContaining({
+          implementation: expect.stringContaining('org.springframework:spring-core:6.0.0')
+        })
+      },
+      package_info: expect.objectContaining({
+        name: 'Spring Core',
+        description: 'Spring Framework Core',
+        latest_version: '6.0.0'
+      }),
+      repository_info: expect.objectContaining({
+        type: 'github',
+        url: 'https://github.com/spring-projects/spring-framework'
+      }),
+      usage_examples: expect.arrayContaining([
+        expect.objectContaining({
+          language: 'java',
+          code: expect.stringContaining('@Configuration')
+        }),
+        expect.objectContaining({
+          language: 'xml',
+          code: expect.stringContaining('<dependency>')
+        })
+      ])
+    });
+
+    expect(mavenCentralApi.packageExists).toHaveBeenCalledWith('org.springframework', 'spring-core');
+    expect(mavenCentralApi.getLatestVersion).toHaveBeenCalledWith('org.springframework', 'spring-core');
+    expect(githubApi.getReadmeFromRepository).toHaveBeenCalled();
+  });
+
+  it('should handle package not found', async () => {
+    vi.mocked(mavenCentralApi.packageExists).mockResolvedValue(false);
+
+    await expect(getPackageReadme({
+      package_name: 'nonexistent:package'
+    })).rejects.toThrow('Package not found');
+
+    expect(mavenCentralApi.packageExists).toHaveBeenCalledWith('nonexistent', 'package');
+  });
+
+  it('should handle specific version', async () => {
+    const mockPomContent = '<project><groupId>test</groupId><artifactId>test</artifactId><version>1.0.0</version></project>';
+    
+    vi.mocked(mavenCentralApi.packageExists).mockResolvedValue(true);
+    vi.mocked(mavenCentralApi.getPomXml).mockResolvedValue(mockPomContent);
+    vi.mocked(mavenCentralApi.parsePomXml).mockReturnValue({
+      project: {
+        groupId: 'test',
+        artifactId: 'test',
+        version: '1.0.0'
+      }
+    });
+    vi.mocked(githubApi.getReadmeFromRepository).mockResolvedValue({
+      content: '# Test Package',
+      source: 'https://github.com/test/test'
+    });
+
+    const result = await getPackageReadme({
+      package_name: 'test:test',
+      version: '1.0.0'
+    });
+
+    expect(result.version).toBe('1.0.0');
+    expect(mavenCentralApi.getPomXml).toHaveBeenCalledWith('test', 'test', '1.0.0');
+    expect(mavenCentralApi.getLatestVersion).not.toHaveBeenCalled();
+  });
+
+  it('should handle missing README gracefully', async () => {
+    const mockPomContent = '<project><groupId>test</groupId><artifactId>test</artifactId><version>1.0.0</version></project>';
+    
+    vi.mocked(mavenCentralApi.packageExists).mockResolvedValue(true);
+    vi.mocked(mavenCentralApi.getLatestVersion).mockResolvedValue('1.0.0');
+    vi.mocked(mavenCentralApi.getPomXml).mockResolvedValue(mockPomContent);
+    vi.mocked(mavenCentralApi.parsePomXml).mockReturnValue({
+      project: {
+        groupId: 'test',
+        artifactId: 'test',
+        version: '1.0.0'
+      }
+    });
+    vi.mocked(githubApi.getReadmeFromRepository).mockResolvedValue(null);
+
+    const result = await getPackageReadme({
+      package_name: 'test:test'
+    });
+
+    expect(result.readme_content).toBe('No README available for this package.');
+    expect(result.usage_examples).toEqual([]);
+  });
+
+  it('should validate package name format', async () => {
+    await expect(getPackageReadme({
+      package_name: 'invalid-package-name'
+    })).rejects.toThrow();
+  });
+
+  it('should not include examples when include_examples is false', async () => {
+    const mockPomContent = '<project><groupId>test</groupId><artifactId>test</artifactId></project>';
+    const mockReadmeContent = `
+# Test
+\`\`\`java
+public class Test {}
+\`\`\`
+    `;
+    
+    vi.mocked(mavenCentralApi.packageExists).mockResolvedValue(true);
+    vi.mocked(mavenCentralApi.getLatestVersion).mockResolvedValue('1.0.0');
+    vi.mocked(mavenCentralApi.getPomXml).mockResolvedValue(mockPomContent);
+    vi.mocked(mavenCentralApi.parsePomXml).mockReturnValue({
+      project: { groupId: 'test', artifactId: 'test' }
+    });
+    vi.mocked(githubApi.getReadmeFromRepository).mockResolvedValue({
+      content: mockReadmeContent,
+      source: 'https://github.com/test/test'
+    });
+
+    const result = await getPackageReadme({
+      package_name: 'test:test',
+      include_examples: false
+    });
+
+    expect(result.usage_examples).toEqual([]);
+  });
+});

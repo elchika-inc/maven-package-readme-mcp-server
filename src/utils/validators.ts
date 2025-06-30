@@ -111,6 +111,6 @@ export class Validators {
    */
   static formatMavenCoordinates(groupId: string, artifactId: string, version?: string): string {
     const coords = `${groupId}:${artifactId}`;
-    return version ? `${coords}:${version}` : coords;
+    return version !== undefined ? `${coords}:${version}` : coords;
   }
 }

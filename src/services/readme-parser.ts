@@ -16,12 +16,24 @@ export class ReadmeParser {
       // Split content into sections
       const sections = this.splitIntoSections(readmeContent);
       
+      // If no sections found, create a default section with all content
+      if (sections.length === 0) {
+        sections.push({
+          title: 'Usage',
+          content: readmeContent,
+          level: 1
+        });
+      }
+      
       // Find sections that likely contain usage examples
       const usageSections = sections.filter(section => 
         this.isUsageSection(section.title)
       );
 
-      for (const section of usageSections) {
+      // If no usage sections found, include all sections
+      const sectionsToProcess = usageSections.length > 0 ? usageSections : sections;
+
+      for (const section of sectionsToProcess) {
         const sectionExamples = this.extractCodeBlocksFromSection(section);
         examples.push(...sectionExamples);
       }
@@ -32,6 +44,7 @@ export class ReadmeParser {
       logger.debug('Extracted usage examples', { 
         totalSections: sections.length,
         usageSections: usageSections.length,
+        processedSections: sectionsToProcess.length,
         examples: uniqueExamples.length 
       });
 
@@ -100,8 +113,10 @@ export class ReadmeParser {
     // Match fenced code blocks (```)
     const fencedCodeRegex = /```(\w+)?\n([\s\S]*?)```/g;
     let match;
+    let hasFencedBlocks = false;
 
     while ((match = fencedCodeRegex.exec(content)) !== null) {
+      hasFencedBlocks = true;
       const language = match[1] || this.detectLanguage(match[2]);
       const code = match[2].trim();
 
@@ -115,18 +130,20 @@ export class ReadmeParser {
       }
     }
 
-    // Match indented code blocks (4 spaces or tab)
-    const indentedCodeRegex = /(?:^|\n)((?:    |\t).+(?:\n(?:    |\t).+)*)/g;
-    while ((match = indentedCodeRegex.exec(content)) !== null) {
-      const code = match[1].replace(/^(    |\t)/gm, '').trim();
-      
-      if (code && this.isRelevantCode(code, 'java')) {
-        examples.push({
-          title: section.title,
-          description: this.extractDescription(content, match.index),
-          code,
-          language: this.detectLanguage(code),
-        });
+    // Only process indented code blocks if no fenced blocks were found
+    if (!hasFencedBlocks) {
+      const indentedCodeRegex = /(?:^|\n)((?:    |\t).+(?:\n(?:    |\t).+)*)/g;
+      while ((match = indentedCodeRegex.exec(content)) !== null) {
+        const code = match[1].replace(/^(    |\t)/gm, '').trim();
+        
+        if (code && this.isRelevantCode(code, 'java')) {
+          examples.push({
+            title: section.title,
+            description: this.extractDescription(content, match.index),
+            code,
+            language: this.detectLanguage(code),
+          });
+        }
       }
     }
 
